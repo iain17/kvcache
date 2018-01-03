@@ -1,10 +1,9 @@
-package lru_test
+package lru
 
 import (
 	"testing"
 	"time"
-
-	"github.com/Akagi201/kvcache/ttlru"
+	"context"
 )
 
 // test that Add returns true/false if an eviction occurred
@@ -13,8 +12,10 @@ func TestLRUTTLAddNoTTL(t *testing.T) {
 	onEvicted := func(k interface{}, v interface{}) {
 		evictCounter += 1
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	l, err := ttlru.NewTTLWithEvict(1, onEvicted)
+	l, err := NewTTLWithEvict(ctx, 1, onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -36,8 +37,10 @@ func TestLRUTTLAddWithTTL(t *testing.T) {
 			t.Errorf("Eviction happened out of order. Got %v, expected %v", v.(int), evictCounter)
 		}
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	l, err := ttlru.NewTTLWithEvict(2, onEvicted)
+	l, err := NewTTLWithEvict(ctx, 2, onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -50,7 +53,7 @@ func TestLRUTTLAddWithTTL(t *testing.T) {
 	}
 
 	// Wait for TTLs to expire
-	time.Sleep(25 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	if evictCounter != 2 {
 		t.Errorf("should have been 2 evictions")

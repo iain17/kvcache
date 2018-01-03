@@ -7,22 +7,23 @@ import (
 	"time"
 
 	hlru "github.com/hashicorp/golang-lru"
+	"context"
 )
 
 // LruWithTTL lru with ttl
 type LruWithTTL struct {
 	*hlru.Cache
-	schedule      map[interface{}]*time.Timer
-	scheduleMutex sync.Mutex
+	schedule      map[interface{}]time.Time
+	scheduleMutex sync.RWMutex
 }
 
 // NewTTL creates an LRU of the given size
-func NewTTL(size int) (*LruWithTTL, error) {
-	return NewTTLWithEvict(size, nil)
+func NewTTL(contex context.Context, size int) (*LruWithTTL, error) {
+	return NewTTLWithEvict(contex, size, nil)
 }
 
 // NewTTLWithEvict creates an LRU of the given size and a evict callback function
-func NewTTLWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*LruWithTTL, error) {
+func NewTTLWithEvict(context context.Context, size int, onEvicted func(key interface{}, value interface{})) (*LruWithTTL, error) {
 	if size <= 0 {
 		return nil, errors.New("Must provide a positive size")
 	}
@@ -30,31 +31,44 @@ func NewTTLWithEvict(size int, onEvicted func(key interface{}, value interface{}
 	if err != nil {
 		return nil, err
 	}
-	return &LruWithTTL{c, make(map[interface{}]*time.Timer), sync.Mutex{}}, nil
+
+	i:= &LruWithTTL{c, make(map[interface{}]time.Time), sync.RWMutex{}}
+	go i.runSchedule(context)
+	return i, nil
+}
+
+func (lru *LruWithTTL) runSchedule(context context.Context) {
+	timer := time.NewTicker(100 * time.Millisecond)
+	for {
+		select {
+		case <-context.Done():
+			return
+		case t := <- timer.C:
+			lru.scheduleMutex.RLock()
+			schedule := lru.schedule
+			lru.scheduleMutex.RUnlock()
+			now := time.Now()
+			for key, ttl := range schedule {
+				if !now.Before(ttl) {
+					lru.Cache.Remove(key)
+					lru.clearSchedule(key)
+				}
+			}
+		}
+	}
 }
 
 func (lru *LruWithTTL) clearSchedule(key interface{}) {
 	lru.scheduleMutex.Lock()
-	defer lru.scheduleMutex.Unlock()
 	delete(lru.schedule, key)
+	lru.scheduleMutex.Unlock()
 }
 
 // AddWithTTL add an key:val with TTL
 func (lru *LruWithTTL) AddWithTTL(key, value interface{}, ttl time.Duration) bool {
 	lru.scheduleMutex.Lock()
-	defer lru.scheduleMutex.Unlock()
-	if lru.schedule[key] != nil {
-		// already scheduled, nothing to do
-		lru.schedule[key].Reset(ttl)
-	} else {
-		lru.schedule[key] = time.NewTimer(ttl)
-		// Schedule cleanup
-		go func() {
-			<-lru.schedule[key].C
-			lru.Cache.Remove(key)
-			lru.clearSchedule(key)
-		}()
-	}
+	lru.schedule[key] = time.Now().Add(ttl)
+	lru.scheduleMutex.Unlock()
 
 	return lru.Cache.Add(key, value)
 }
