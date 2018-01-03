@@ -43,7 +43,7 @@ func (lru *LruWithTTL) runSchedule(context context.Context) {
 		select {
 		case <-context.Done():
 			return
-		case t := <- timer.C:
+		case _ := <- timer.C:
 			lru.scheduleMutex.RLock()
 			schedule := lru.schedule
 			lru.scheduleMutex.RUnlock()
