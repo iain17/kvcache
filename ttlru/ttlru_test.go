@@ -32,10 +32,7 @@ func TestLRUTTLAddNoTTL(t *testing.T) {
 func TestLRUTTLAddWithTTL(t *testing.T) {
 	evictCounter := 0
 	onEvicted := func(k interface{}, v interface{}) {
-		evictCounter += 1
-		if v.(int) != evictCounter {
-			t.Errorf("Eviction happened out of order. Got %v, expected %v", v.(int), evictCounter)
-		}
+		evictCounter++
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -53,7 +50,7 @@ func TestLRUTTLAddWithTTL(t *testing.T) {
 	}
 
 	// Wait for TTLs to expire
-	time.Sleep(1 * time.Second)
+	time.Sleep(200 * time.Millisecond)
 
 	if evictCounter != 2 {
 		t.Errorf("should have been 2 evictions")

@@ -44,24 +44,17 @@ func (lru *LruWithTTL) runSchedule(context context.Context) {
 		case <-context.Done():
 			return
 		case <- timer.C:
-			lru.scheduleMutex.RLock()
-			schedule := lru.schedule
-			lru.scheduleMutex.RUnlock()
+			lru.scheduleMutex.Lock()
 			now := time.Now()
-			for key, ttl := range schedule {
+			for key, ttl := range lru.schedule {
 				if !now.Before(ttl) {
 					lru.Cache.Remove(key)
-					lru.clearSchedule(key)
+					delete(lru.schedule, key)
 				}
 			}
+			lru.scheduleMutex.Unlock()
 		}
 	}
-}
-
-func (lru *LruWithTTL) clearSchedule(key interface{}) {
-	lru.scheduleMutex.Lock()
-	delete(lru.schedule, key)
-	lru.scheduleMutex.Unlock()
 }
 
 // AddWithTTL add an key:val with TTL
