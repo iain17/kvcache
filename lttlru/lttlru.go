@@ -55,12 +55,25 @@ func (lru *LruWithTTL) Contains(key interface{}) bool {
 	if lru.expiresAt[key] != nil {
 		if !lru.expiresAt[key].After(time.Now()) {
 			lru.removeExpired(key)
-			lru.expireMutex.Unlock()
+			lru.expireMutex.RUnlock()
 			return false
 		}
 	}
-	lru.expireMutex.Unlock()
+	lru.expireMutex.RUnlock()
 	return lru.Cache.Contains(key)
+}
+
+func (lru *LruWithTTL) Peek(key interface{}) (interface{}, bool) {
+	lru.expireMutex.RLock()
+	if lru.expiresAt[key] != nil {
+		if !lru.expiresAt[key].After(time.Now()) {
+			lru.removeExpired(key)
+			lru.expireMutex.RUnlock()
+			return nil, false
+		}
+	}
+	lru.expireMutex.RUnlock()
+	return lru.Cache.Peek(key)
 }
 
 func (lru *LruWithTTL) Get(key interface{}) (interface{}, bool) {
@@ -68,11 +81,11 @@ func (lru *LruWithTTL) Get(key interface{}) (interface{}, bool) {
 	if lru.expiresAt[key] != nil {
 		if !lru.expiresAt[key].After(time.Now()) {
 			lru.removeExpired(key)
-			lru.expireMutex.Unlock()
+			lru.expireMutex.RUnlock()
 			return nil, false
 		}
 	}
-	lru.expireMutex.Unlock()
+	lru.expireMutex.RUnlock()
 	return lru.Cache.Get(key)
 }
 
